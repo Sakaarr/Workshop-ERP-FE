@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Backgrounds ── */
+    --background: 0 0% 100%;
+    --foreground: 224 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 10% 10%;
+
+    /* ── Brand — Deep Charcoal + Warm Amber ── */
+    --brand-50:  38 100% 97%;
+    --brand-100: 38 100% 92%;
+    --brand-200: 36 94% 82%;
+    --brand-400: 35 86% 60%;
+    --brand-500: 33 92% 50%;
+    --brand-600: 30 90% 42%;
+    --brand-800: 24 80% 28%;
+    --brand-900: 20 72% 18%;
+
+    /* ── Semantic ── */
+    --primary: 224 76% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 13% 96%;
+    --secondary-foreground: 224 10% 32%;
+    --muted: 220 13% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 38 100% 92%;
+    --accent-foreground: 24 80% 28%;
+    --destructive: 0 84% 54%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 224 76% 48%;
+
+    /* ── Status ── */
+    --success: 142 72% 36%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 142 76% 94%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 20 72% 18%;
+    --warning-muted: 38 100% 94%;
+    --info: 199 89% 42%;
+    --info-foreground: 0 0% 100%;
+    --info-muted: 199 100% 94%;
+
+    --radius: 0.5rem;
+
+    /* ── Sidebar ── */
+    --sidebar-width: 240px;
+    --sidebar-width-collapsed: 64px;
+  }
+
+  .dark {
+    --background: 224 12% 8%;
+    --foreground: 210 20% 92%;
+    --card: 224 12% 11%;
+    --card-foreground: 210 20% 92%;
+    --popover: 224 12% 11%;
+    --popover-foreground: 210 20% 92%;
+
+    --brand-50:  24 30% 14%;
+    --brand-100: 26 36% 20%;
+    --brand-200: 30 44% 30%;
+    --brand-400: 35 70% 50%;
+    --brand-500: 33 88% 56%;
+    --brand-600: 36 86% 64%;
+    --brand-800: 38 90% 76%;
+    --brand-900: 40 100% 88%;
+
+    --primary: 224 76% 60%;
+    --primary-foreground: 224 12% 8%;
+    --secondary: 224 12% 16%;
+    --secondary-foreground: 210 20% 80%;
+    --muted: 224 12% 14%;
+    --muted-foreground: 220 9% 56%;
+    --accent: 26 36% 20%;
+    --accent-foreground: 38 100% 80%;
+    --destructive: 0 72% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 224 12% 18%;
+    --input: 224 12% 18%;
+    --ring: 224 76% 60%;
+
+    --success: 142 60% 44%;
+    --success-muted: 142 30% 14%;
+    --warning: 38 80% 52%;
+    --warning-muted: 30 30% 14%;
+    --info: 199 70% 50%;
+    --info-muted: 199 30% 14%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* ── Smooth scrollbar ── */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+
+  /* ── Focus ring ── */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* ── Selection ── */
+  ::selection {
+    @apply bg-brand-100 text-brand-800;
+  }
+}
+
+@layer components {
+  /* ── Skeleton shimmer ── */
+  .skeleton {
+    @apply bg-muted animate-shimmer;
+    background-image: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--secondary)) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+  }
+
+  /* ── Page transition wrapper ── */
+  .page-enter {
+    animation: slide-up 0.25s ease-out;
+  }
+
+  /* ── Status badges ── */
+  .badge-waiting    { @apply bg-warning-muted text-warning-foreground; }
+  .badge-diagnosing { @apply bg-info-muted text-info-foreground; }
+  .badge-repairing  { @apply bg-brand-100 text-brand-800; }
+  .badge-ready      { @apply bg-success-muted text-success-foreground; }
+  .badge-delivered  { @apply bg-muted text-muted-foreground; }
+  .badge-cancelled  { @apply bg-destructive/10 text-destructive; }
+}
