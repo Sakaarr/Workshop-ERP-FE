@@ -5,17 +5,25 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sidebar } from "@/components/layout/sidebar";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { usePermissionStore } from "@/lib/stores/permission-store";
+import { CommandPalette } from "@/components/command-palette";
+
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const fetchPermissions = usePermissionStore(s => s.fetchPermissions);
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    if (!isAuthenticated) router.replace("/login");
-  }, [isAuthenticated, router]);
+    if (!isAuthenticated) {
+      router.replace("/login");
+    } else {
+      fetchPermissions();
+    }
+  }, [isAuthenticated, router, fetchPermissions]);
 
   if (!mounted || !isAuthenticated) {
     return (
@@ -27,8 +35,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
-
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.main
@@ -40,6 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             {children}
           </motion.main>
+          <CommandPalette />
         </AnimatePresence>
       </div>
     </div>

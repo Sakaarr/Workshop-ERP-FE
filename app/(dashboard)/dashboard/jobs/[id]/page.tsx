@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Car, User, Clock, Wrench, Package, CheckCircle2,
   ChevronRight, FileText, Pencil, Plus, Loader2, AlertCircle,
-  Receipt, X,
+  Receipt, X, Shield, Download,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Topbar } from "@/components/layout/topbar";
@@ -17,6 +17,21 @@ import { customersApi } from "@/lib/api/customers";
 import { vehiclesApi } from "@/lib/api/vehicles";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { InvoicePanel } from "@/components/billing/invoice-panel";
+import { gatePassApi } from "@/lib/api/gate-pass";
+import { apiClient } from "@/lib/api/client";
+
+const API_BASE_URL = (apiClient.defaults.baseURL ?? "").replace(/\/$/, "");
+
+// Opens a PDF in a new tab with the auth token injected as a query param.
+// Requires the backend to support ?token= on PDF endpoints.
+// If your backend uses cookie auth instead, remove this and use the plain URL.
+function openPdf(path: string) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const url = token
+    ? `${API_BASE_URL}${path}?token=${encodeURIComponent(token)}`
+    : `${API_BASE_URL}${path}`;
+  window.open(url, "_blank", "noreferrer");
+}
 
 // ── Status workflow config ──────────────────────────────────
 const STATUS_STEPS: { key: JobStatus; label: string; icon: React.ElementType }[] = [
@@ -77,6 +92,22 @@ export default function JobDetailPage() {
     queryKey: ["vehicles", job?.vehicle_id],
     queryFn: () => vehiclesApi.get(job!.vehicle_id),
     enabled: !!job?.vehicle_id,
+  });
+
+  // ── Gate pass ──────────────────────────────────────────────
+  const { data: gatePass } = useQuery({
+    queryKey: ["gate-passes", "by-invoice", invoice?.id],
+    queryFn: () => gatePassApi.getByInvoice(invoice!.id),
+    enabled: !!invoice?.id,
+  });
+
+  const gatePassMutation = useMutation({
+    mutationFn: () => gatePassApi.create(invoice!.id, job!.id),
+    onSuccess: () => {
+      toast.success("Gate pass issued!");
+      qc.invalidateQueries({ queryKey: ["gate-passes"] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail ?? "Failed to issue gate pass"),
   });
 
   const statusMutation = useMutation({
@@ -146,6 +177,14 @@ export default function JobDetailPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Print Job Card */}
+            <button
+              onClick={() => openPdf(`/pdf/job-card/${job.id}`)}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-muted/60 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <FileText className="w-4 h-4" /> Print Job Card
+            </button>
+
             {canCreateInvoice && (
               <motion.button
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
@@ -155,6 +194,7 @@ export default function JobDetailPage() {
                 <Receipt className="w-4 h-4" /> Generate Invoice
               </motion.button>
             )}
+
             {invoice && (
               <motion.button
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
@@ -164,6 +204,28 @@ export default function JobDetailPage() {
                 <Receipt className="w-4 h-4" /> View Invoice
               </motion.button>
             )}
+
+            {invoice && !gatePass && invoice.payment_status !== "pending" && (
+              <motion.button
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                onClick={() => gatePassMutation.mutate()}
+                disabled={gatePassMutation.isPending}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                {gatePassMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                Issue Gate Pass
+              </motion.button>
+            )}
+
+            {gatePass && (
+              <button
+                onClick={() => openPdf(`/pdf/gate-pass/${gatePass.id}`)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-success text-success-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                <Download className="w-4 h-4" /> Gate Pass PDF
+              </button>
+            )}
+
             {nextStatus && job.status !== "delivered" && (
               <motion.button
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
@@ -171,9 +233,7 @@ export default function JobDetailPage() {
                 disabled={statusMutation.isPending}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-foreground/90 transition-colors disabled:opacity-60"
               >
-                {statusMutation.isPending
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : <ChevronRight className="w-4 h-4" />}
+                {statusMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
                 Mark as {nextStatus.replace("_", " ")}
               </motion.button>
             )}
