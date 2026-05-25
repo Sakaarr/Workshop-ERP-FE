@@ -155,3 +155,38 @@
   .badge-delivered  { @apply bg-muted text-muted-foreground; }
   .badge-cancelled  { @apply bg-destructive/10 text-destructive; }
 }
+
+@layer utilities {
+  /* ── Mobile-safe touch targets ── */
+  @media (max-width: 768px) {
+    .touch-target {
+      @apply min-h-[44px] min-w-[44px];
+    }
+  }
+
+  /* ── Print styles ── */
+  @media print {
+    .no-print { display: none !important; }
+    .print-only { display: block !important; }
+
+    body {
+      background: white !important;
+      color: black !important;
+    }
+
+    .bg-card {
+      background: white !important;
+      border: 1px solid #e5e7eb !important;
+    }
+  }
+
+  /* ── Scrollbar on mobile ── */
+  @media (max-width: 640px) {
+    ::-webkit-scrollbar { width: 0; height: 0; }
+  }
+
+  /* ── Safe area for notched phones ── */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

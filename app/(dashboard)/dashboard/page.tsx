@@ -7,7 +7,7 @@ import {
   TrendingUp, TrendingDown, ClipboardList, Users,
   Package, AlertTriangle, ArrowUpRight, ArrowDownRight,
   Clock, Wrench, CheckCircle2, Crown, Phone,
-  BarChart3, Activity,
+  BarChart3, Activity,Truck
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -107,6 +107,11 @@ export default function DashboardPage() {
   const { data: topCustomers } = useQuery({
     queryKey: ["analytics", "top-customers"],
     queryFn: () => analyticsApi.topCustomers(5),
+  });
+
+  const { data: supplierStats } = useQuery({
+    queryKey: ["analytics", "supplier-parts"],
+    queryFn: analyticsApi.supplierParts,
   });
 
   const formattedChart = chartData?.map(p => ({
@@ -366,6 +371,54 @@ export default function DashboardPage() {
                 <div className="py-8 text-center text-xs text-muted-foreground">No data yet</div>
               )}
             </div>
+          </motion.div>
+          {/* Supplier parts distribution */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }}
+            className="bg-card border border-border rounded-xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Truck className="w-4 h-4 text-muted-foreground" />
+                <h2 className="text-[13px] font-semibold text-foreground">Stock by Supplier</h2>
+              </div>
+              <button onClick={() => router.push("/dashboard/suppliers")} className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">
+                Manage
+              </button>
+            </div>
+
+            {supplierStats && supplierStats.length > 0 ? (
+              <div className="p-4 space-y-3">
+                {supplierStats.slice(0, 5).map((s, i) => {
+                  const maxParts = Math.max(...supplierStats.map(x => x.parts_count));
+                  const pct = maxParts > 0 ? (s.parts_count / maxParts) * 100 : 0;
+                  const colors = ["bg-amber-500", "bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-rose-500"];
+                  return (
+                    <div key={s.supplier_id} className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground truncate max-w-[140px]">{s.supplier_name}</span>
+                        <div className="text-right shrink-0 ml-2">
+                          <span className="text-xs font-semibold text-foreground">{s.parts_count} parts</span>
+                          <span className="text-[10px] text-muted-foreground ml-1">· {formatCurrency(s.total_stock_value)}</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 0.8, delay: 0.5 + i * 0.1, ease: "easeOut" }}
+                          className={cn("h-full rounded-full", colors[i % colors.length])}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-xs text-muted-foreground">
+                No supplier data yet
+              </div>
+            )}
           </motion.div>
 
           {/* Quick stats */}
