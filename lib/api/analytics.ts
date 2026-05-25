@@ -49,6 +49,12 @@ export interface TopCustomer {
   total_spent: string;
   job_count: number;
 }
+export interface SupplierPartStat {
+  supplier_id: string;
+  supplier_name: string;
+  parts_count: number;
+  total_stock_value: string;
+}
 
 export const analyticsApi = {
   dashboard: () =>
@@ -62,4 +68,7 @@ export const analyticsApi = {
 
   topCustomers: (limit = 5) =>
     apiClient.get<TopCustomer[]>("/analytics/top-customers", { params: { limit } }).then(r => r.data),
+
+  supplierParts: () =>
+    apiClient.get<SupplierPartStat[]>("/analytics/supplier-parts").then(r => r.data),
 };
