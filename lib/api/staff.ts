@@ -13,6 +13,16 @@ export interface StaffMember {
   job_count: number;
 }
 
+export interface AssignableStaff {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  job_count: number;
+  is_active: boolean;
+  avatar_url: string | null;
+}
+
 export const staffApi = {
   list: (params: { page?: number; search?: string }) =>
     apiClient.get<PaginatedResponse<StaffMember>>("/staff", { params }).then(r => r.data),
@@ -23,11 +33,17 @@ export const staffApi = {
   me: () =>
     apiClient.get<StaffMember>("/staff/me").then(r => r.data),
 
+  assignable: () =>
+    apiClient.get<AssignableStaff[]>("/job-cards/assignable-staff").then(r => r.data),
+
   create: (data: { full_name: string; email: string; phone?: string; role: string; password: string }) =>
     apiClient.post<StaffMember>("/staff", data).then(r => r.data),
 
   update: (id: string, data: Partial<{ full_name: string; phone: string; role: string; is_active: boolean }>) =>
     apiClient.patch<StaffMember>(`/staff/${id}`, data).then(r => r.data),
+
+  updateMyProfile: (data: { full_name?: string; phone?: string; avatar_url?: string }) =>
+    apiClient.patch<StaffMember>("/staff/me/profile", data).then(r => r.data),
 
   resetPassword: (id: string, new_password: string) =>
     apiClient.post(`/staff/${id}/reset-password`, { new_password }),
