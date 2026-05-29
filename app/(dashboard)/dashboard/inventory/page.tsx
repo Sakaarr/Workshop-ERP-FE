@@ -1,20 +1,31 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Package, Plus, Search, AlertTriangle, Pencil,
-  Trash2, ArrowUp, ArrowDown, Tag, ChevronDown,
-} from "lucide-react";
-import toast from "react-hot-toast";
-import { Topbar } from "@/components/layout/topbar";
-import { Pagination } from "@/components/ui/pagination";
-import { EmptyState } from "@/components/ui/empty-state";
 import { InventoryDrawer } from "@/components/inventory/inventory-drawer";
 import { StockAdjustDrawer } from "@/components/inventory/stock-adjust-drawer";
+import { Topbar } from "@/components/layout/topbar";
+import { BarcodeScanner } from "@/components/ui/barcode-scanner";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 import { inventoryApi, type InventoryItem } from "@/lib/api/inventory";
-import { formatCurrency, cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import {
+  AlertTriangle,
+  ArrowUp,
+  Package,
+  Pencil,
+  Plus,
+  ScanBarcode,
+  Search,
+  Tag,
+  Trash2,
+  Square,
+  CheckSquare,
+} from "lucide-react";
+import { useState } from "react";
+import toast from "react-hot-toast";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export default function InventoryPage() {
   const qc = useQueryClient();
@@ -26,6 +37,9 @@ export default function InventoryPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null);
 
   const handleSearch = (v: string) => {
     setSearch(v);
@@ -53,11 +67,28 @@ export default function InventoryPage() {
     queryFn: inventoryApi.lowStock,
   });
 
+  const items = data?.items ?? [];
+  const selectedCount = selectedIds.length;
+
   const deleteMutation = useMutation({
     mutationFn: inventoryApi.delete,
-    onSuccess: () => { toast.success("Item deleted"); qc.invalidateQueries({ queryKey: ["inventory"] }); },
+    onSuccess: () => { toast.success("Item deleted"); qc.invalidateQueries({ queryKey: ["inventory"] }); setSelectedIds([]); },
     onError: () => toast.error("Failed to delete item"),
   });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: inventoryApi.bulkDelete,
+    onSuccess: () => {
+      toast.success("Items deleted");
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      setSelectedIds([]);
+    },
+    onError: () => toast.error("Failed to delete items"),
+  });
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  };
 
   return (
     <div className="flex flex-col min-h-full">
@@ -118,6 +149,15 @@ export default function InventoryPage() {
             />
           </div>
 
+          {/* Barcode scanner button */}
+          <button
+            onClick={() => setScannerOpen(true)}
+            className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border hover:bg-muted/60 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ScanBarcode className="w-4 h-4" />
+            <span className="hidden sm:inline">Scan</span>
+          </button>
+
           {/* Category filter */}
           <div className="flex items-center gap-1.5 overflow-x-auto">
             <button
@@ -140,12 +180,21 @@ export default function InventoryPage() {
           </div>
         </div>
 
+        {selectedCount > 0 && (
+          <button
+            onClick={() => setDeleteTarget(items.find(item => item.id === selectedIds[0]) ?? null)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/20 bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/15 transition-colors"
+          >
+            Delete Selected ({selectedCount})
+          </button>
+        )}
+
         {/* Table */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                {["Part Name", "Part No.", "Category", "Stock", "Cost", "Selling Price", "Supplier", ""].map(h => (
+                {["", "Part Name", "Part No.", "Category", "Stock", "Cost", "Selling Price", "Supplier", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -154,7 +203,7 @@ export default function InventoryPage() {
               {isLoading
                 ? Array.from({ length: 7 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="skeleton h-4 rounded" style={{ width: `${35 + Math.random() * 45}%` }} />
                         </td>
@@ -169,6 +218,15 @@ export default function InventoryPage() {
                       transition={{ delay: i * 0.025 }}
                       className="hover:bg-muted/30 transition-colors group"
                     >
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleSelected(item.id)}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {selectedIds.includes(item.id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                        </button>
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className={cn("w-2 h-2 rounded-full shrink-0", item.is_low_stock ? "bg-warning" : "bg-success")} />
@@ -213,7 +271,7 @@ export default function InventoryPage() {
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteMutation.mutate(item.id); }}
+                            onClick={() => setDeleteTarget(item)}
                             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -242,6 +300,34 @@ export default function InventoryPage() {
 
       <InventoryDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} item={editItem} />
       <StockAdjustDrawer open={!!adjustItem} onClose={() => setAdjustItem(null)} item={adjustItem} />
+        <BarcodeScanner
+          open={scannerOpen}
+          onClose={() => setScannerOpen(false)}
+          onScan={(code) => {
+            handleSearch(code);
+            setScannerOpen(false);
+          }}
+          title="Scan Part Barcode"
+          description="Point camera at barcode to search inventory"
+        />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={selectedCount > 1 ? `Delete ${selectedCount} items?` : `Delete "${deleteTarget?.name ?? "item"}"?`}
+        description={selectedCount > 1
+          ? "This will permanently remove the selected inventory items."
+          : "This will permanently remove the inventory item."}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending || bulkDeleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (selectedCount > 1) {
+            bulkDeleteMutation.mutate(selectedIds);
+          } else if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id);
+          }
+          setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

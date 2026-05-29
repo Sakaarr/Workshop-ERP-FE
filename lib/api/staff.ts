@@ -53,4 +53,7 @@ export const staffApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/staff/${id}`),
+
+  bulkDelete: (ids: string[]) =>
+    apiClient.post("/staff/bulk-delete", { ids }),
 };

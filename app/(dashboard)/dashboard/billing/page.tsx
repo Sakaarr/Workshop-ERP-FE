@@ -107,14 +107,18 @@ export default function BillingPage() {
                       const StatusIcon = status.icon;
                       const balance = parseFloat(inv.total_amount) - parseFloat(inv.paid_amount);
                       return (
-                        <motion.tr
-                          key={inv.id}
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.03 }}
-                          className="hover:bg-muted/30 transition-colors cursor-pointer group"
-                          onClick={() => router.push(`/dashboard/jobs/${inv.job_card_id}`)}
-                        >
+                      <motion.tr
+                        key={inv.id}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                        className="hover:bg-muted/30 transition-colors cursor-pointer group"
+                          onClick={() => {
+                            if (inv.job_card_id) {
+                              router.push(`/dashboard/jobs/${inv.job_card_id}`);
+                            }
+                          }}
+                      >
                           <td className="px-4 py-3">
                             <span className="font-mono text-xs font-semibold text-foreground">{inv.invoice_number}</span>
                           </td>

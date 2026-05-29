@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useState, useEffect } from "react";
+import { useForm, useFormContext } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
@@ -11,6 +11,8 @@ import toast from "react-hot-toast";
 import { inventoryApi, type InventoryItem } from "@/lib/api/inventory";
 import { suppliersApi } from "@/lib/api/suppliers";
 import { cn } from "@/lib/utils";
+import { BarcodeScanner } from "@/components/ui/barcode-scanner";
+import { ScanBarcode } from "lucide-react";
 
 const schema = z.object({
   name: z.string().min(1, "Name required"),
@@ -53,6 +55,8 @@ export function InventoryDrawer({ open, onClose, item }: Props) {
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const { setValue: setFormValue } = useFormContext?.() ?? {};
 
   useEffect(() => {
     if (open) {
@@ -145,16 +149,38 @@ export function InventoryDrawer({ open, onClose, item }: Props) {
               </div>
 
               {/* Part no + barcode */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Part Number</label>
-                  <input {...register("part_number")} placeholder="e.g. BP-1234" className={ic(false)} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Barcode</label>
-                  <input {...register("barcode")} placeholder="Scan or type..." className={ic(false)} />
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Barcode</label>
+                <div className="relative">
+                  <input
+                    {...register("barcode")}
+                    placeholder="Scan or type barcode..."
+                    className={cn(ic(false), "pr-10")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setScannerOpen(true)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Scan barcode"
+                  >
+                    <ScanBarcode className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
+              <BarcodeScanner
+                  open={scannerOpen}
+                  onClose={() => setScannerOpen(false)}
+                  onScan={(code) => {
+                    // setValue from react-hook-form
+                    const barcodeInput = document.querySelector('input[name="barcode"]') as HTMLInputElement;
+                    if (barcodeInput) {
+                      barcodeInput.value = code;
+                      barcodeInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                  }}
+                  title="Scan Part Barcode"
+                  description="Scan barcode to auto-fill"
+                />
 
               {/* Category */}
               <div className="space-y-1.5">

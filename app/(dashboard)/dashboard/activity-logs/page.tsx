@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/layout/topbar";
 import { Pagination } from "@/components/ui/pagination";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { activityLogsApi, type ActivityLog } from "@/lib/api/activity-logs";
 import { staffApi } from "@/lib/api/staff";
 import { formatDate, cn } from "@/lib/utils";
@@ -71,6 +72,8 @@ export default function ActivityLogsPage() {
   const [dateFrom, setDateFrom] = useState(monthStartStr());
   const [dateTo, setDateTo] = useState(todayStr());
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const [selectedMetadata, setSelectedMetadata] = useState<Record<string, unknown> | null>(null);
 
   const handleSearch = (v: string) => {
     setSearch(v);
@@ -342,7 +345,7 @@ export default function ActivityLogsPage() {
                         <td className="px-4 py-3">
                           {log.metadata && Object.keys(log.metadata).length > 0 && (
                             <button
-                              onClick={() => alert(JSON.stringify(log.metadata, null, 2))}
+                              onClick={() => { setSelectedMetadata(log.metadata as Record<string, unknown>); setMetadataOpen(true); }}
                               className="text-[10px] text-brand-600 hover:text-brand-700 font-medium transition-colors"
                             >
                               Details
@@ -367,6 +370,21 @@ export default function ActivityLogsPage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={metadataOpen}
+        title="Activity Metadata"
+        description={
+          <pre className="max-h-[50vh] overflow-auto rounded-xl bg-muted/60 p-3 text-[11px] leading-relaxed text-foreground">
+            {JSON.stringify(selectedMetadata ?? {}, null, 2)}
+          </pre>
+        }
+        confirmLabel="Close"
+        cancelLabel="Dismiss"
+        tone="default"
+        onClose={() => setMetadataOpen(false)}
+        onConfirm={() => setMetadataOpen(false)}
+      />
     </div>
   );
 }

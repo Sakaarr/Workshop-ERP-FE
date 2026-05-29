@@ -10,6 +10,8 @@ import {
   Trash2,
   CheckCircle2,
   XCircle,
+  Square,
+  CheckSquare,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -17,6 +19,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { Pagination } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StaffDrawer } from "@/components/staff/staff-drawer";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { staffApi, type StaffMember } from "@/lib/api/staff";
 import { getInitials, cn } from "@/lib/utils";
@@ -46,6 +49,8 @@ export default function StaffPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
 
   const handleSearch = (v: string) => {
     setSearch(v);
@@ -66,6 +71,9 @@ export default function StaffPage() {
         search: debouncedSearch || undefined,
       }),
   });
+
+  const items = data?.items ?? [];
+  const selectedCount = selectedIds.length;
 
   const toggleMutation = useMutation({
     mutationFn: ({
@@ -92,6 +100,7 @@ export default function StaffPage() {
     onSuccess: () => {
       toast.success("Staff member removed");
       qc.invalidateQueries({ queryKey: ["staff"] });
+      setSelectedIds([]);
     },
 
     onError: (e: any) => {
@@ -100,6 +109,22 @@ export default function StaffPage() {
       );
     },
   });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: staffApi.bulkDelete,
+    onSuccess: () => {
+      toast.success("Staff members removed");
+      qc.invalidateQueries({ queryKey: ["staff"] });
+      setSelectedIds([]);
+    },
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.detail ?? "Failed to delete staff members");
+    },
+  });
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  };
 
   return (
     <div className="flex flex-col min-h-full">
@@ -131,6 +156,15 @@ export default function StaffPage() {
             </motion.button>
           )}
         </div>
+
+        {selectedCount > 0 && (
+          <button
+            onClick={() => setDeleteTarget(items.find(item => item.id === selectedIds[0]) ?? null)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/20 bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/15 transition-colors"
+          >
+            Delete Selected ({selectedCount})
+          </button>
+        )}
 
         {/* Search */}
         <div className="relative max-w-sm">
@@ -195,10 +229,10 @@ export default function StaffPage() {
                         </div>
                       </div>
 
-                      <div
-                        className={cn(
-                          "flex items-center gap-1 shrink-0",
-                          member.is_active
+                    <div
+                      className={cn(
+                        "flex items-center gap-1 shrink-0",
+                        member.is_active
                             ? "text-success"
                             : "text-destructive"
                         )}
@@ -237,6 +271,13 @@ export default function StaffPage() {
                         currentUser?.role === "admin") && (
                         <div className="flex items-center gap-2 pt-1 border-t border-border">
                           <button
+                            onClick={() => toggleSelected(member.id)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          >
+                            {selectedIds.includes(member.id) ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                          </button>
+
+                          <button
                             onClick={() =>
                               toggleMutation.mutate({
                                 id: member.id,
@@ -256,15 +297,7 @@ export default function StaffPage() {
                           </button>
 
                           <button
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  `Remove ${member.full_name}?`
-                                )
-                              ) {
-                                deleteMutation.mutate(member.id);
-                              }
-                            }}
+                            onClick={() => setDeleteTarget(member)}
                             className="w-7 h-7 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-destructive hover:border-destructive/30 hover:bg-destructive/10 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -305,6 +338,24 @@ export default function StaffPage() {
       <StaffDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
+      />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={selectedCount > 1 ? `Delete ${selectedCount} staff members?` : `Remove ${deleteTarget?.full_name ?? "staff member"}?`}
+        description={selectedCount > 1
+          ? "This will permanently remove the selected staff members."
+          : "This will permanently remove the staff member."}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending || bulkDeleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (selectedCount > 1) {
+            bulkDeleteMutation.mutate(selectedIds);
+          } else if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id);
+          }
+          setDeleteTarget(null);
+        }}
       />
     </div>
   );

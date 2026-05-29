@@ -12,6 +12,7 @@ import { usePermissionStore } from "@/lib/stores/permission-store";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const hasHydrated = useAuthStore(s => s.hasHydrated);
   const fetchPermissions = usePermissionStore(s => s.fetchPermissions);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -19,17 +20,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || !hasHydrated) return;
     if (!isAuthenticated) {
       router.replace("/login");
     } else {
       fetchPermissions();
     }
-  }, [isAuthenticated, router, fetchPermissions]);
+  }, [mounted, hasHydrated, isAuthenticated, router, fetchPermissions]);
 
   // Close mobile sidebar on route change
   useEffect(() => { setMobileOpen(false); }, []);
 
-  if (!mounted || !isAuthenticated) {
+  if (!mounted || !hasHydrated || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />

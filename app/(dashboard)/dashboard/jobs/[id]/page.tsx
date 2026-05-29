@@ -20,17 +20,16 @@ import { InvoicePanel } from "@/components/billing/invoice-panel";
 import { gatePassApi } from "@/lib/api/gate-pass";
 import { apiClient } from "@/lib/api/client";
 
-const API_BASE_URL = (apiClient.defaults.baseURL ?? "").replace(/\/$/, "");
-
-// Opens a PDF in a new tab with the auth token injected as a query param.
-// Requires the backend to support ?token= on PDF endpoints.
-// If your backend uses cookie auth instead, remove this and use the plain URL.
-function openPdf(path: string) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-  const url = token
-    ? `${API_BASE_URL}${path}?token=${encodeURIComponent(token)}`
-    : `${API_BASE_URL}${path}`;
-  window.open(url, "_blank", "noreferrer");
+async function openPdf(path: string) {
+  const tab = window.open("about:blank", "_blank", "noreferrer");
+  const response = await apiClient.get(path, { responseType: "blob" });
+  const pdfUrl = URL.createObjectURL(response.data);
+  if (tab) {
+    tab.location.href = pdfUrl;
+  } else {
+    window.open(pdfUrl, "_blank", "noreferrer");
+  }
+  window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
 }
 
 // ── Status workflow config ──────────────────────────────────
@@ -62,7 +61,8 @@ const NEXT_STATUS: Partial<Record<JobStatus, JobStatus>> = {
 };
 
 export default function JobDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string | string[] }>();
+  const jobId = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
   const qc = useQueryClient();
   const [invoicePanelOpen, setInvoicePanelOpen] = useState(false);
@@ -72,14 +72,15 @@ export default function JobDetailPage() {
   const [diagnosis, setDiagnosis] = useState("");
 
   const { data: job, isLoading } = useQuery({
-    queryKey: ["job-cards", id],
-    queryFn: () => jobCardsApi.get(id),
+    queryKey: ["job-cards", jobId],
+    queryFn: () => jobCardsApi.get(jobId!),
+    enabled: !!jobId,
   });
 
   const { data: invoice } = useQuery({
-    queryKey: ["invoices", "by-job", id],
-    queryFn: () => invoicesApi.getByJob(id),
-    enabled: !!id,
+    queryKey: ["invoices", "by-job", jobId],
+    queryFn: () => invoicesApi.getByJob(jobId!),
+    enabled: !!jobId,
   });
 
   const { data: customer } = useQuery({
@@ -111,7 +112,7 @@ export default function JobDetailPage() {
   });
 
   const statusMutation = useMutation({
-    mutationFn: (status: JobStatus) => jobCardsApi.updateStatus(id, status),
+    mutationFn: (status: JobStatus) => jobCardsApi.updateStatus(jobId!, status),
     onSuccess: (updated) => {
       toast.success(`Status updated to ${updated.status.replace("_", " ")}`);
       qc.invalidateQueries({ queryKey: ["job-cards"] });
@@ -121,17 +122,17 @@ export default function JobDetailPage() {
 
   const updateMutation = useMutation({
     mutationFn: (data: { diagnosis?: string; internal_notes?: string }) =>
-      jobCardsApi.update(id, data),
+      jobCardsApi.update(jobId!, data),
     onSuccess: () => {
       toast.success("Updated");
-      qc.invalidateQueries({ queryKey: ["job-cards", id] });
+      qc.invalidateQueries({ queryKey: ["job-cards", jobId] });
       setEditingNotes(false);
       setEditingDiagnosis(false);
     },
     onError: () => toast.error("Update failed"),
   });
 
-  if (isLoading || !job) {
+  if (!jobId || isLoading || !job) {
     return (
       <div className="flex flex-col min-h-full">
         <Topbar />
@@ -153,7 +154,7 @@ export default function JobDetailPage() {
       <div className="flex-1 p-6 max-w-[1200px] w-full mx-auto space-y-5">
 
         {/* Back */}
-        <button onClick={() => router.back()} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => router.back()} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to Job Cards
         </button>
 
@@ -179,7 +180,7 @@ export default function JobDetailPage() {
           <div className="flex items-center gap-2 flex-wrap">
             {/* Print Job Card */}
             <button
-              onClick={() => openPdf(`/pdf/job-card/${job.id}`)}
+              onClick={() => { void openPdf(`/pdf/job-card/${job.id}`); }}
               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-muted/60 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <FileText className="w-4 h-4" /> Print Job Card
@@ -219,7 +220,7 @@ export default function JobDetailPage() {
 
             {gatePass && (
               <button
-                onClick={() => openPdf(`/pdf/gate-pass/${gatePass.id}`)}
+                onClick={() => { void openPdf(`/pdf/gate-pass/${gatePass.id}`); }}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-success text-success-foreground text-sm font-medium hover:opacity-90 transition-opacity"
               >
                 <Download className="w-4 h-4" /> Gate Pass PDF

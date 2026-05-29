@@ -38,4 +38,7 @@ export const suppliersApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/suppliers/${id}`),
+
+  bulkDelete: (ids: string[]) =>
+    apiClient.post("/suppliers/bulk-delete", { ids }),
 };

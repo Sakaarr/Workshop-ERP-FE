@@ -8,10 +8,11 @@ import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp, TrendingDown, DollarSign, Plus, Trash2,
-  ChevronLeft, ChevronRight, BookOpen, Loader2,
+  ChevronLeft, ChevronRight, BookOpen, Loader2, Square, CheckSquare,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Topbar } from "@/components/layout/topbar";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   daybookApi, type DayBookEntryCreate,
   INCOME_CATEGORIES, EXPENSE_CATEGORIES,
@@ -28,31 +29,44 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 function todayStr() {
-  return new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function formatDisplayDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-NP", {
+  return new Date(`${d}T12:00:00`).toLocaleDateString("en-NP", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
 }
 
 function shiftDate(d: string, days: number): string {
-  const dt = new Date(d + "T00:00:00");
+  const [year, month, day] = d.split("-").map(Number);
+  const dt = new Date(year, month - 1, day);
   dt.setDate(dt.getDate() + days);
-  return dt.toISOString().split("T")[0];
+  const nextYear = dt.getFullYear();
+  const nextMonth = String(dt.getMonth() + 1).padStart(2, "0");
+  const nextDay = String(dt.getDate()).padStart(2, "0");
+  return `${nextYear}-${nextMonth}-${nextDay}`;
 }
 
 export default function DayBookPage() {
   const qc = useQueryClient();
   const [date, setDate] = useState(todayStr());
   const [showForm, setShowForm] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const today = todayStr();
 
   const { data: summary, isLoading } = useQuery({
     queryKey: ["daybook-summary", date],
     queryFn: () => daybookApi.summary(date),
   });
+
+  const selectedCount = selectedIds.length;
+  const allSelected = (summary?.entries.length ?? 0) > 0 && (summary?.entries ?? []).every(entry => selectedIds.includes(entry.id));
 
   const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -81,8 +95,19 @@ export default function DayBookPage() {
     onSuccess: () => {
       toast.success("Entry deleted");
       qc.invalidateQueries({ queryKey: ["daybook-summary", date] });
+      setSelectedIds([]);
     },
     onError: () => toast.error("Failed to delete entry"),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: daybookApi.bulkDelete,
+    onSuccess: () => {
+      toast.success("Entries deleted");
+      qc.invalidateQueries({ queryKey: ["daybook-summary", date] });
+      setSelectedIds([]);
+    },
+    onError: () => toast.error("Failed to delete entries"),
   });
 
   const income = parseFloat(summary?.total_income ?? "0");
@@ -115,6 +140,15 @@ export default function DayBookPage() {
             <Plus className="w-4 h-4" /> Add Entry
           </motion.button>
         </div>
+
+        {selectedCount > 0 && (
+          <button
+            onClick={() => setDeleteTarget(selectedIds[0])}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/20 bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/15 transition-colors"
+          >
+            Delete Selected ({selectedCount})
+          </button>
+        )}
 
         {/* Date navigator */}
         <div className="flex items-center gap-3">
@@ -305,6 +339,14 @@ export default function DayBookPage() {
                   transition={{ delay: i * 0.04 }}
                   className="flex items-center gap-3 px-5 py-3.5 hover:bg-muted/30 transition-colors group"
                 >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(current => current.includes(entry.id) ? current.filter(id => id !== entry.id) : [...current, entry.id])}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label={`Select ${entry.description}`}
+                  >
+                    {selectedIds.includes(entry.id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                  </button>
                   <div className={cn(
                     "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
                     entry.entry_type === "income" ? "bg-success-muted" : "bg-destructive/10",
@@ -332,7 +374,7 @@ export default function DayBookPage() {
                       {entry.entry_type === "income" ? "+" : "−"}{formatCurrency(entry.amount)}
                     </span>
                     <button
-                      onClick={() => { if (confirm("Delete this entry?")) deleteMutation.mutate(entry.id); }}
+                      onClick={() => setDeleteTarget(entry.id)}
                       className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -367,6 +409,24 @@ export default function DayBookPage() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={selectedCount > 1 ? `Delete ${selectedCount} entries?` : "Delete this entry?"}
+        description={selectedCount > 1
+          ? "This will permanently remove the selected daybook entries."
+          : "This will permanently remove the daybook entry."}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending || bulkDeleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (selectedCount > 1) {
+            bulkDeleteMutation.mutate(selectedIds);
+          } else if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget);
+          }
+          setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }
