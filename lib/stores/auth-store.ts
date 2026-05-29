@@ -7,9 +7,11 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
+  hasHydrated: boolean;
 
   setTokens: (access: string, refresh: string) => void;
   setUser: (user: UserResponse) => void;
+  setHasHydrated: (hasHydrated: boolean) => void;
   logout: () => void;
 }
 
@@ -20,6 +22,7 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
+      hasHydrated: false,
 
       setTokens: (accessToken, refreshToken) => {
         localStorage.setItem("access_token", accessToken);
@@ -28,6 +31,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setUser: (user) => set({ user }),
+      setHasHydrated: (hasHydrated) => set({ hasHydrated }),
 
       logout: () => {
         localStorage.removeItem("access_token");
@@ -43,6 +47,12 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state, error) => {
+        state?.setHasHydrated(true);
+        if (error) {
+          console.error("Failed to hydrate auth store", error);
+        }
+      },
     },
   ),
 );

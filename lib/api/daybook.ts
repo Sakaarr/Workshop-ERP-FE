@@ -49,4 +49,7 @@ export const daybookApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/daybook/${id}`),
+
+  bulkDelete: (ids: string[]) =>
+    apiClient.post("/daybook/bulk-delete", { ids }),
 };

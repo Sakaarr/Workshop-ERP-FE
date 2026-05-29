@@ -8,6 +8,7 @@ import {
   LayoutDashboard, Users, Car, ClipboardList, Package,
   Receipt, BookOpen, BarChart3, Settings, LogOut, Wrench,
   ChevronLeft, Bell, Shield, Truck, UserCog, Search,
+  Activity,
 } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/use-auth";
@@ -26,6 +27,7 @@ interface NavGroup {
   label: string;
   items: NavItem[];
 }
+
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -63,8 +65,10 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/staff", label: "Staff", icon: UserCog, permission: "staff.view" },
       { href: "/dashboard/settings", label: "Settings", icon: Settings, permission: "settings.view" },
+      { href: "/dashboard/activity-logs", label: "Activity Logs", icon: Activity, adminOnly: true },
     ],
   },
+  
 ];
 
 interface SidebarProps {
@@ -77,6 +81,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { logout } = useAuth();
   const user = useAuthStore(s => s.user);
   const { can, isAdmin } = usePermissions();
+  
 
   return (
     <motion.aside
@@ -130,6 +135,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-2">
         {NAV_GROUPS.map(group => {
           const visibleItems = group.items.filter(item => {
+            if (item.adminOnly) return isAdmin;
             if (!item.permission) return true;
             return can(item.permission);
           });

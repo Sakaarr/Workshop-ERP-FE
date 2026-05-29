@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Plus, Search, ClipboardList, Car, User, Clock, CheckCircle2, Wrench, Package, ChevronRight } from "lucide-react";
+import { Plus, Search, ClipboardList, Car, User, Clock, CheckCircle2, Wrench, Package, ChevronRight, Trash2, Square, CheckSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import { Topbar } from "@/components/layout/topbar";
 import { Pagination } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { jobCardsApi, type JobStatus, type JobCardListItem } from "@/lib/api/job-cards";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
@@ -22,21 +24,24 @@ const STATUSES: { value: JobStatus | "all"; label: string; icon: React.ElementTy
 ];
 
 const STATUS_STYLE: Record<string, { dot: string; badge: string }> = {
-  waiting:       { dot: "bg-warning", badge: "badge-waiting" },
-  diagnosing:    { dot: "bg-info", badge: "badge-diagnosing" },
-  repairing:     { dot: "bg-brand-500", badge: "badge-repairing" },
+  waiting: { dot: "bg-warning", badge: "badge-waiting" },
+  diagnosing: { dot: "bg-info", badge: "badge-diagnosing" },
+  repairing: { dot: "bg-brand-500", badge: "badge-repairing" },
   waiting_parts: { dot: "bg-warning", badge: "badge-waiting" },
-  ready:         { dot: "bg-success", badge: "badge-ready" },
-  delivered:     { dot: "bg-muted-foreground", badge: "badge-delivered" },
-  cancelled:     { dot: "bg-destructive", badge: "badge-cancelled" },
+  ready: { dot: "bg-success", badge: "badge-ready" },
+  delivered: { dot: "bg-muted-foreground", badge: "badge-delivered" },
+  cancelled: { dot: "bg-destructive", badge: "badge-cancelled" },
 };
 
 export default function JobCardsPage() {
   const router = useRouter();
+  const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<JobStatus | "all">("all");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<JobCardListItem | null>(null);
 
   const handleSearch = (v: string) => {
     setSearch(v);
@@ -54,12 +59,38 @@ export default function JobCardsPage() {
     }),
   });
 
+  const items = data?.items ?? [];
+  const selectedCount = selectedIds.length;
+
+  const deleteMutation = useMutation({
+    mutationFn: jobCardsApi.delete,
+    onSuccess: () => {
+      toast.success("Job card deleted");
+      qc.invalidateQueries({ queryKey: ["job-cards"] });
+      setSelectedIds([]);
+    },
+    onError: () => toast.error("Failed to delete job card"),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: jobCardsApi.bulkDelete,
+    onSuccess: () => {
+      toast.success("Job cards deleted");
+      qc.invalidateQueries({ queryKey: ["job-cards"] });
+      setSelectedIds([]);
+    },
+    onError: () => toast.error("Failed to delete job cards"),
+  });
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  };
+
   return (
     <div className="flex flex-col min-h-full">
       <Topbar title="Job Cards" />
 
       <div className="flex-1 p-6 max-w-[1400px] w-full mx-auto space-y-4">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">Job Cards</h1>
@@ -74,7 +105,15 @@ export default function JobCardsPage() {
           </motion.button>
         </div>
 
-        {/* Status filter tabs */}
+        {selectedCount > 0 && (
+          <button
+            onClick={() => setDeleteTarget(items.find(item => item.id === selectedIds[0]) ?? null)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/20 bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/15 transition-colors"
+          >
+            Delete Selected ({selectedCount})
+          </button>
+        )}
+
         <div className="flex items-center gap-1 overflow-x-auto pb-1">
           {STATUSES.map(s => {
             const Icon = s.icon;
@@ -87,7 +126,7 @@ export default function JobCardsPage() {
                   "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all",
                   active
                     ? "bg-foreground text-background"
-                    : "bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground border border-border"
+                    : "bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground border border-border",
                 )}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -97,7 +136,6 @@ export default function JobCardsPage() {
           })}
         </div>
 
-        {/* Search */}
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
@@ -108,12 +146,11 @@ export default function JobCardsPage() {
           />
         </div>
 
-        {/* Jobs list */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                {["Job #", "Customer", "Vehicle", "Complaint", "Assigned", "Status", "Cost", "Date", ""].map(h => (
+                {["", "Job #", "Customer", "Vehicle", "Complaint", "Assigned", "Status", "Cost", "Date", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -122,7 +159,7 @@ export default function JobCardsPage() {
               {isLoading
                 ? Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 9 }).map((_, j) => (
+                      {Array.from({ length: 10 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="skeleton h-4 rounded" style={{ width: `${30 + Math.random() * 50}%` }} />
                         </td>
@@ -140,6 +177,16 @@ export default function JobCardsPage() {
                         onClick={() => router.push(`/dashboard/jobs/${job.id}`)}
                         className="hover:bg-muted/30 transition-colors cursor-pointer group"
                       >
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => toggleSelected(job.id)}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            aria-label={`Select ${job.job_number}`}
+                          >
+                            {selectedIds.includes(job.id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                          </button>
+                        </td>
                         <td className="px-4 py-3">
                           <span className="font-mono text-xs font-medium text-foreground">{job.job_number}</span>
                         </td>
@@ -177,7 +224,18 @@ export default function JobCardsPage() {
                           {formatDate(job.created_at, "relative")}
                         </td>
                         <td className="px-4 py-3">
-                          <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                setDeleteTarget(job);
+                              }}
+                              className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                          </div>
                         </td>
                       </motion.tr>
                     );
@@ -199,6 +257,25 @@ export default function JobCardsPage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={selectedCount > 1 ? `Delete ${selectedCount} job cards?` : `Delete ${deleteTarget?.job_number ?? "job card"}?`}
+        description={selectedCount > 1
+          ? "This will permanently remove the selected job cards."
+          : "This will permanently remove the job card."}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending || bulkDeleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (selectedCount > 1) {
+            bulkDeleteMutation.mutate(selectedIds);
+          } else if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id);
+          }
+          setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

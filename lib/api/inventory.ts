@@ -60,4 +60,7 @@ export const inventoryApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/inventory/${id}`),
+
+  bulkDelete: (ids: string[]) =>
+    apiClient.post("/inventory/bulk-delete", { ids }),
 };

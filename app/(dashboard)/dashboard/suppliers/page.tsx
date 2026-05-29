@@ -6,11 +6,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { Truck, Plus, Search, Phone, Mail, MapPin, Pencil, Trash2, X, Loader2, Building } from "lucide-react";
+import { Truck, Plus, Search, Phone, Mail, MapPin, Pencil, Trash2, X, Loader2, Building, Square, CheckSquare } from "lucide-react";
 import toast from "react-hot-toast";
 import { Topbar } from "@/components/layout/topbar";
 import { Pagination } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { suppliersApi, type Supplier } from "@/lib/api/suppliers";
 import { formatDate, cn } from "@/lib/utils";
 
@@ -33,6 +34,8 @@ export default function SuppliersPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
 
   const handleSearch = (v: string) => {
     setSearch(v);
@@ -44,6 +47,9 @@ export default function SuppliersPage() {
     queryKey: ["suppliers", page, debouncedSearch],
     queryFn: () => suppliersApi.list({ page, page_size: 20, search: debouncedSearch || undefined }),
   });
+
+  const items = data?.items ?? [];
+  const selectedCount = selectedIds.length;
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -76,8 +82,21 @@ export default function SuppliersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: suppliersApi.delete,
-    onSuccess: () => { toast.success("Supplier deleted"); qc.invalidateQueries({ queryKey: ["suppliers"] }); },
+    onSuccess: () => { toast.success("Supplier deleted"); qc.invalidateQueries({ queryKey: ["suppliers"] }); setSelectedIds([]); },
   });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: suppliersApi.bulkDelete,
+    onSuccess: () => {
+      toast.success("Suppliers deleted");
+      qc.invalidateQueries({ queryKey: ["suppliers"] });
+      setSelectedIds([]);
+    },
+  });
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  };
 
   const ic = (err: boolean) => cn(
     "w-full h-9 px-3 rounded-lg border text-sm text-foreground bg-background placeholder:text-muted-foreground/60",
@@ -103,6 +122,15 @@ export default function SuppliersPage() {
             <Plus className="w-4 h-4" /> Add Supplier
           </motion.button>
         </div>
+
+        {selectedCount > 0 && (
+          <button
+            onClick={() => setDeleteTarget(items.find(item => item.id === selectedIds[0]) ?? null)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/20 bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/15 transition-colors"
+          >
+            Delete Selected ({selectedCount})
+          </button>
+        )}
 
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -140,13 +168,19 @@ export default function SuppliersPage() {
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
+                        onClick={() => toggleSelected(supplier.id)}
+                        className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {selectedIds.includes(supplier.id) ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
                         onClick={() => openEdit(supplier)}
                         className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => { if (confirm(`Delete ${supplier.name}?`)) deleteMutation.mutate(supplier.id); }}
+                        onClick={() => setDeleteTarget(supplier)}
                         className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -279,6 +313,25 @@ export default function SuppliersPage() {
           </>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={selectedCount > 1 ? `Delete ${selectedCount} suppliers?` : `Delete ${deleteTarget?.name ?? "supplier"}?`}
+        description={selectedCount > 1
+          ? "This will permanently remove the selected suppliers."
+          : "This will permanently remove the supplier."}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending || bulkDeleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (selectedCount > 1) {
+            bulkDeleteMutation.mutate(selectedIds);
+          } else if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id);
+          }
+          setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

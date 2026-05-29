@@ -58,4 +58,7 @@ export const jobCardsApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/job-cards/${id}`),
+
+  bulkDelete: (ids: string[]) =>
+    apiClient.post("/job-cards/bulk-delete", { ids }),
 };

@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, Users, Phone, MapPin, Car, MoreHorizontal, Pencil, Trash2, Eye } from "lucide-react";
+import { Plus, Search, Users, Phone, MapPin, Car, Pencil, Trash2, Eye, Square, CheckSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Topbar } from "@/components/layout/topbar";
 import { Pagination } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CustomerDrawer } from "@/components/customers/customer-drawer";
-import { customersApi, type CustomerListItem } from "@/lib/api/customers";
+import { customersApi, type Customer, type CustomerListItem } from "@/lib/api/customers";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
 export default function CustomersPage() {
@@ -20,8 +21,9 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<CustomerListItem | null>(null);
-  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<CustomerListItem | null>(null);
 
   // debounce search
   const handleSearch = (v: string) => {
@@ -38,17 +40,44 @@ export default function CustomersPage() {
     queryFn: () => customersApi.list({ page, page_size: 20, search: debouncedSearch || undefined }),
   });
 
+  const items = data?.items ?? [];
+  const selectedCount = selectedIds.length;
+  const allSelected = items.length > 0 && items.every(customer => selectedIds.includes(customer.id));
+
   const deleteMutation = useMutation({
     mutationFn: customersApi.delete,
     onSuccess: () => {
       toast.success("Customer deleted");
       qc.invalidateQueries({ queryKey: ["customers"] });
+      setSelectedIds([]);
     },
     onError: () => toast.error("Failed to delete customer"),
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: customersApi.bulkDelete,
+    onSuccess: () => {
+      toast.success("Customers deleted");
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      setSelectedIds([]);
+    },
+    onError: () => toast.error("Failed to delete customers"),
+  });
+
   const openCreate = () => { setEditingCustomer(null); setDrawerOpen(true); };
-  const openEdit = (c: CustomerListItem) => { setEditingCustomer(c as any); setDrawerOpen(true); setMenuOpen(null); };
+  const openEdit = async (c: CustomerListItem) => {
+    try {
+      const fullCustomer = await customersApi.get(c.id);
+      setEditingCustomer(fullCustomer);
+      setDrawerOpen(true);
+    } catch {
+      toast.error("Failed to load customer details");
+    }
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  };
 
   return (
     <div className="flex flex-col min-h-full">
@@ -64,14 +93,25 @@ export default function CustomersPage() {
               {data?.total ?? 0} total customers
             </p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-foreground/90 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Customer
-          </motion.button>
+          <div className="flex items-center gap-2">
+            {selectedCount > 0 && (
+              <motion.button
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                onClick={() => setDeleteTarget(items.find(item => item.id === selectedIds[0]) ?? null)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/20 bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/15 transition-colors"
+              >
+                Delete Selected ({selectedCount})
+              </motion.button>
+            )}
+            <motion.button
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-foreground/90 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Customer
+            </motion.button>
+          </div>
         </div>
 
         {/* Search */}
@@ -90,9 +130,18 @@ export default function CustomersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                {["Customer", "Phone", "City", "Vehicles", "Balance", "Since", ""].map(h => (
+                {["", "Customer", "Phone", "City", "Vehicles", "Balance", "Since", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 whitespace-nowrap">
-                    {h}
+                    {h || (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedIds(allSelected ? [] : items.map(item => item.id))}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label={allSelected ? "Clear selection" : "Select all"}
+                      >
+                        {allSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                      </button>
+                    )}
                   </th>
                 ))}
               </tr>
@@ -116,6 +165,16 @@ export default function CustomersPage() {
                       transition={{ delay: i * 0.03 }}
                       className="hover:bg-muted/30 transition-colors group"
                     >
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleSelected(customer.id)}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={`Select ${customer.name}`}
+                        >
+                          {selectedIds.includes(customer.id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                        </button>
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-50/10 flex items-center justify-center text-brand-700 dark:text-brand-400 text-xs font-bold shrink-0">
@@ -176,9 +235,7 @@ export default function CustomersPage() {
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(`Delete ${customer.name}?`)) deleteMutation.mutate(customer.id);
-                            }}
+                            onClick={() => setDeleteTarget(customer)}
                             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -211,7 +268,25 @@ export default function CustomersPage() {
       <CustomerDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        customer={editingCustomer as any}
+        customer={editingCustomer}
+      />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={selectedCount > 1 ? `Delete ${selectedCount} customers?` : `Delete ${deleteTarget?.name ?? "customer"}?`}
+        description={selectedCount > 1
+          ? "This will permanently remove the selected customers from the list."
+          : "This will permanently remove the customer from the list."}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending || bulkDeleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (selectedCount > 1) {
+            bulkDeleteMutation.mutate(selectedIds);
+            return;
+          }
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
       />
     </div>
   );
